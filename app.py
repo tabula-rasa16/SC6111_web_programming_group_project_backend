@@ -21,14 +21,14 @@ app.config.from_object(Config)
 
 # Create a MySQL connector
 
-db = pymysql.connect(host='localhost', port =13306, user='root', password='5903q1w2e3@Q', db='binance_demo', charset='utf8mb3') #本地
+db = pymysql.connect(host='localhost', port =13306, user='', password='', db='binance_demo', charset='utf8mb3') #本地 账密替换
 cursor = db.cursor()
 
 cursor.execute("SELECT VERSION()")
- 
+
 # 使用 fetchone() 方法获取单条数据.
 data = cursor.fetchone()
- 
+
 print ("Database version : %s " % data)
 
 
@@ -48,7 +48,7 @@ def order(body: OrderBook):
     user_id = 1
 
     order_info = pre_insert(order_info)
-    
+
     # Generate SQL string to insert data into "order_book" table
     sql = "INSERT INTO order_book (user_id, order_price, order_amount, type, create_time, del_flag) VALUES (%s, %s, %s, %s, %s, %s)"
     values = (user_id, order_info.order_price, order_info.order_amount,order_info.order_type,order_info.create_time,order_info.del_flag)
@@ -69,4 +69,4 @@ def order(body: OrderBook):
 if __name__ == '__main__':
     host = app.config.get('HOST', '127.0.0.1')  # 默认值为 '127.0.0.1'，如果未找到 'HOST' 配置项
     port = app.config.get('PORT', 5000)  # 默认值为 5000，如果未找到 'PORT' 配置项
-    app.run(host=host, port=port)   
+    app.run(host=host, port=port)
