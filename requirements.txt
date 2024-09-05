@@ -1,0 +1,5 @@
+flask
+pymysql
+pydantic
+Flask-Pydantic
+# pysnowflake  用于主键生成，如果数据库主键设置为自增的话可以不用
