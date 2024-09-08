@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>{{ heading }}</h1>
+    </header>
+
+    <main>
+        <p>{{ content }}</p>
+
+        <!-- Loop through a list -->
+        <h2>Items:</h2>
+        <ul>
+            {% for item in items %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        
+        <!-- Conditional rendering -->
+        {% if user %}
+        <p>Welcome, {{ user }}!</p>
+        {% else %}
+        <p>Please log in.</p>
+        {% endif %}
+    </main>
+
+    <footer>
+        <p>© 2024 {{ title }}</p>
+    </footer>
+</body>
+</html>

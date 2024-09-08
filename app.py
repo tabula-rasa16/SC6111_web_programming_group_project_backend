@@ -21,7 +21,7 @@ app.config.from_object(Config)
 
 # Create a MySQL connector
 
-db = pymysql.connect(host='localhost', port =13306, user='', password='', db='binance_demo', charset='utf8mb3') #本地 账密替换
+db = pymysql.connect(host='localhost', port =13306, user='root', password='admin', db='binance_demo', charset='utf8mb3') #本地 账密替换
 cursor = db.cursor()
 
 cursor.execute("SELECT VERSION()")
@@ -33,8 +33,14 @@ print ("Database version : %s " % data)
 
 
 @app.route('/')
-def hello():
-    return 'Hello, Flask!'
+def home():
+    # Passing dynamic content to the Jinja template
+    return render_template('index.html', 
+                           title="My Flask App", 
+                           heading="Welcome to My Flask App", 
+                           content="This is a sample Jinja page.",
+                           items=['Flask', 'Jinja2', 'Python'], 
+                           user="John Doe")
 
 
 
