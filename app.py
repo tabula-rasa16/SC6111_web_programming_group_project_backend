@@ -1,6 +1,3 @@
-from functools import wraps
-from pyexpat.errors import messages
-
 from flask import Flask, request, render_template
 import json
 import pymysql
@@ -40,35 +37,9 @@ def hello():
 @validate()
 def buy(body: Order):
     buyOrder = body
-
-    selectSellOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price asc"
-    updateSellOrderSql = "update order_book set processed_amount = %s, status = %s where id = %s"
-    createBuyOrderSql = "insert into order_book (type, order_price, order_amount) values (%s, %s, %s)"
-    createTradeSql = "insert into trade_record (trade_price, trade_amount) values (%s, %s)"
-
-    cursor.execute(db.escape_string(selectSellOrderSql), (buyOrder.price, 'sell'))
-    orders = cursor.fetchall()
-
     try:
-        for order in orders:
-            sellAmount = order['order_amount'] - order['processed_amount']
-            buyOrder.amount -= sellAmount
-            if buyOrder.amount > 0:
-                cursor.execute(db.escape_string(updateSellOrderSql), (order['order_amount'], 1, order['id']))
-                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], sellAmount))
-            else:
-                cursor.execute(db.escape_string(updateSellOrderSql),
-                               (order['order_amount'] + buyOrder.amount, 0, order['id']))
-                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], sellAmount + buyOrder.amount))
-                break
-
-        if buyOrder.amount > 0:
-            cursor.execute(db.escape_string(createBuyOrderSql), ('buy', buyOrder.price, buyOrder.amount))
-
-        db.commit()
-
-        return response(code=200, message="Order Success")
-
+        trade(buyOrder.price, buyOrder.amount, 'buy')
+        return response(code=200, message="Sell Success")
     except pymysql.Error as e:
         db.rollback()
         return response(code=500, message=f"Database error: {e}")
@@ -78,38 +49,98 @@ def buy(body: Order):
 @validate()
 def sell(body: Order):
     sellOrder = body
-
-    selectBuyOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price desc"
-    updateBuyOrderSql = "update order_book set processed_amount = %s, status = %s where id = %s"
-    createSellOrderSql = "insert into order_book (type, order_price, order_amount) values (%s, %s, %s)"
-    createTradeSql = "insert into trade_record (trade_price, trade_amount) values (%s, %s)"
-
-    cursor.execute(db.escape_string(selectBuyOrderSql), (sellOrder.price, 'buy'))
-    orders = cursor.fetchall()
-
     try:
-        for order in orders:
-            buyAmount = order['order_amount'] - order['processed_amount']
-            sellOrder.amount -= buyAmount
-            if sellOrder.amount > 0:
-                cursor.execute(db.escape_string(updateBuyOrderSql), (order['order_amount'], 1, order['id']))
-                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], buyAmount))
-            else:
-                cursor.execute(db.escape_string(updateBuyOrderSql),
-                               (order['order_amount'] + sellOrder.amount, 0, order['id']))
-                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], buyAmount + sellOrder.amount))
-                break
-
-        if sellOrder.amount > 0:
-            cursor.execute(db.escape_string(createSellOrderSql), ('buy', sellOrder.price, sellOrder.amount))
-
-        db.commit()
-
-        return response(code=200, message="Order Success")
-
+        trade(sellOrder.price, sellOrder.amount, 'sell')
+        return response(code=200, message="Sell Success")
     except pymysql.Error as e:
         db.rollback()
         return response(code=500, message=f"Database error: {e}")
+
+
+def trade(price, amount, type):
+    selectOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price "
+    updateOrderSql = "update order_book set processed_amount = %s, status = %s where id = %s"
+    createOrderSql = "insert into order_book (type, order_price, order_amount) values (%s, %s, %s)"
+    createTradeSql = "insert into trade_record (trade_price, trade_amount) values (%s, %s)"
+
+    orderType = 'asc' if type == 'buy' else 'desc'
+    selectType = 'sell' if type == 'buy' else 'buy'
+
+    cursor.execute(db.escape_string(selectOrderSql+orderType), (price, selectType))
+    orders = cursor.fetchall()
+
+    for order in orders:
+        restAmount = order['order_amount'] - order['processed_amount']
+        amount -= restAmount
+        if amount > 0:
+            cursor.execute(db.escape_string(updateOrderSql), (order['order_amount'], 1, order['id']))
+            cursor.execute(db.escape_string(createTradeSql), (order['order_price'], restAmount))
+        else:
+            cursor.execute(db.escape_string(updateOrderSql),
+                           (order['order_amount'] + amount, 0, order['id']))
+            cursor.execute(db.escape_string(createTradeSql), (order['order_price'], restAmount + amount))
+            break
+
+    if amount > 0:
+        cursor.execute(db.escape_string(createOrderSql), (type, price, amount))
+
+    db.commit()
+
+
+@app.route('/getOrderList', methods=['GET'])
+def getOrderList():
+    getOrderListSql = "select order_price, order_amount, processed_amount from order_book where type = %s and status = 0 order by order_price desc"
+
+    try:
+        sellList, buyList = getOrders(getOrderListSql, 'sell'), getOrders(getOrderListSql, 'buy')
+        orderList = {
+            'sellList': sellList,
+            'buyList': buyList,
+            'maxBuyPrice': buyList[0]['price'],
+        }
+        return response(code=200, message="Order List", data=orderList)
+    except pymysql.Error as e:
+        db.rollback()
+        return response(code=500, message=f"an error occurred: Database error: {e}")
+
+
+def getOrders(sql, type):
+    orderList = []
+    cursor.execute(db.escape_string(sql), (type,))
+    orders = cursor.fetchall()
+    for order in orders:
+        orderList.append({
+            'price': order['order_price'],
+            'amount': order['order_amount'] - order['processed_amount']
+        })
+    return orderList
+
+
+@app.route('/getTradeList', methods=['GET'])
+def getTradeList():
+    # endTime = datetime.now()
+    # startTime = endTime - timedelta(minutes=10)
+    sql = "select trade_price, trade_amount, create_time from trade_record order by create_time desc limit 50"
+    # sql = "select trade_price, trade_amount, create_time from trade_record where create_time between %s and %s order by create_time desc limit 50"
+
+    try:
+        tradeList = []
+        cursor.execute(db.escape_string(sql))
+        # cursor.execute(db.escape_string(sql), (startTime, endTime))
+        trades = cursor.fetchall()
+        for trade in trades:
+            tradeList.append({
+                'price': trade['trade_price'],
+                'amount': trade['trade_amount'],
+                'create_time': trade['create_time'].strftime("%H:%M:%S")
+            })
+        res = {'tradeList': tradeList}
+        return response(code=200, message="Trade List", data=res)
+    except pymysql.Error as e:
+        db.rollback()
+        return response(code=500, message=f"an error occurred: Database error: {e}")
+
+
 
 
 # get chart data
