@@ -58,15 +58,17 @@ def sell(body: Order):
 
 
 def trade(price, amount, type):
-    selectOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price "
+    selectBuyOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price asc"
+    selectSellOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price >= %s and status = 0 and type = %s order by order_price asc"
+
     updateOrderSql = "update order_book set processed_amount = %s, status = %s where id = %s"
     createOrderSql = "insert into order_book (type, order_price, order_amount) values (%s, %s, %s)"
     createTradeSql = "insert into trade_record (trade_price, trade_amount) values (%s, %s)"
 
-    orderType = 'asc' if type == 'buy' else 'desc'
     selectType = 'sell' if type == 'buy' else 'buy'
+    selectOrderSql = selectBuyOrderSql if type == 'buy' else selectSellOrderSql
 
-    cursor.execute(db.escape_string(selectOrderSql+orderType), (price, selectType))
+    cursor.execute(db.escape_string(selectOrderSql), (price, selectType))
     orders = cursor.fetchall()
 
     for order in orders:
@@ -74,11 +76,11 @@ def trade(price, amount, type):
         amount -= restAmount
         if amount > 0:
             cursor.execute(db.escape_string(updateOrderSql), (order['order_amount'], 1, order['id']))
-            cursor.execute(db.escape_string(createTradeSql), (order['order_price'], restAmount))
+            cursor.execute(db.escape_string(createTradeSql), (order['order_price'] if type == 'buy' else price, restAmount))
         else:
             cursor.execute(db.escape_string(updateOrderSql),
                            (order['order_amount'] + amount, 0, order['id']))
-            cursor.execute(db.escape_string(createTradeSql), (order['order_price'], restAmount + amount))
+            cursor.execute(db.escape_string(createTradeSql), (order['order_price'] if type == 'buy' else price, restAmount + amount))
             break
 
     if amount > 0:
