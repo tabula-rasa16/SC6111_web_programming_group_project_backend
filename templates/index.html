@@ -21,33 +21,48 @@
 
           <!-- BUY Orders Section -->
           <div><b>BUY</b></div>
+          <div class="order-book-header">
+            <span>Price (USDT)</span>
+            <span>Amount (BTC)</span>
+            <span>Total</span>
+          </div>
           <div id="buyOrders" class="list-item">
             <div class="order-book-item">
               <span>54,463.00</span> <span>0.5000 BTC</span>
+              <span>27,231.50</span>
             </div>
             <div class="order-book-item">
               <span>54,462.50</span> <span>0.3000 BTC</span>
+              <span>16,338.75</span>
             </div>
             <div class="order-book-item">
               <span>54,462.00</span> <span>0.2000 BTC</span>
+              <span>10,892.40</span>
             </div>
           </div>
 
           <!-- Middle Price Display -->
           <div id="middlePrice" class="middle-price">54,463.68</div>
-          <!-- Example Number -->
 
           <!-- SELL Orders Section -->
           <div><b>SELL</b></div>
+          <div class="order-book-header">
+            <span>Price (USDT)</span>
+            <span>Amount (BTC)</span>
+            <span>Total</span>
+          </div>
           <div id="sellOrders" class="list-item">
             <div class="order-book-item">
               <span>54,464.00</span> <span>0.2500 BTC</span>
+              <span>13,616.00</span>
             </div>
             <div class="order-book-item">
               <span>54,465.00</span> <span>0.1000 BTC</span>
+              <span>5,446.50</span>
             </div>
             <div class="order-book-item">
               <span>54,466.00</span> <span>0.3000 BTC</span>
+              <span>16,339.80</span>
             </div>
           </div>
         </div>
@@ -79,14 +94,13 @@
                 />
               </div>
             </div>
+
             <div class="row mt-3">
               <div class="col-6">
-                <button class="btn btn-primary w-100" onclick="buy()">
-                  Buy
-                </button>
+                <button class="btn buy-btn w-100" onclick="buy()">Buy</button>
               </div>
               <div class="col-6">
-                <button class="btn btn-primary w-100" onclick="sell()">
+                <button class="btn sell-btn w-100" onclick="sell()">
                   Sell
                 </button>
               </div>
