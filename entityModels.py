@@ -39,5 +39,8 @@ class TradeRecord(BaseModel):
     create_time: Optional[str] = None
     del_flag: Optional[str] = None
 
+class Interval(BaseModel):
+    interval: Optional[int] = 1
+
 
 
