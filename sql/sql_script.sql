@@ -20,7 +20,7 @@ CREATE TABLE `order_book` (
   `type` enum('buy','sell') NOT NULL,
   `order_price` decimal(10,2) NOT NULL COMMENT '期望价格',
   `order_amount` decimal(10,2) NOT NULL COMMENT '请求数额',
-  `processed_amount` decimal(10,2) DEFAULT NULL COMMENT '已交易部分数额',
+  `processed_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '已交易部分数额',
   `status` char(1) NOT NULL DEFAULT '0' COMMENT '订单状态: 0未完成，1完成',
   `create_time` datetime DEFAULT current_timestamp,
   `update_time` datetime ON UPDATE current_timestamp DEFAULT current_timestamp,
@@ -32,7 +32,7 @@ CREATE TABLE `order_book` (
 -- binance_demo.trade_record definition
 
 CREATE TABLE `trade_record` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `buyer_id` int(11) DEFAULT NULL,
   `seller_id` int(11) DEFAULT NULL,
   `trade_price` decimal(10,2) NOT NULL,

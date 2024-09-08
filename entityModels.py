@@ -15,7 +15,7 @@ class SysUser(BaseModel):
     user_name: str
     create_time: Optional[str] = None
     del_flag: Optional[str] = None
-    
+
 
 class OrderBook(BaseModel):
     id: Optional[int] = None
@@ -28,7 +28,7 @@ class OrderBook(BaseModel):
     create_time: Optional[str] = None
     update_time: Optional[str] = None
     del_flag: Optional[str] = None
-    
+
 
 class TradeRecord(BaseModel):
     id: Optional[int] = None
@@ -41,6 +41,11 @@ class TradeRecord(BaseModel):
 
 class Interval(BaseModel):
     interval: Optional[int] = 1
+
+
+class Order(BaseModel):
+    price: Decimal
+    amount: Decimal
 
 
 

@@ -1,3 +1,6 @@
+from functools import wraps
+from pyexpat.errors import messages
+
 from flask import Flask, request, render_template
 import json
 import pymysql
@@ -6,8 +9,6 @@ from typing import Optional
 from flask_pydantic import validate
 
 from config import Config
-
-
 
 from common.utils import *
 from common.jsontools import *
@@ -18,62 +19,101 @@ from entityModels import *
 app = Flask(__name__)
 app.config.from_object(Config)
 
-
 # Create a MySQL connector
 
-db = pymysql.connect(host='localhost', port =13306, user='root', password='admin', db='binance_demo', charset='utf8mb3') #本地 账密替换
+db = pymysql.connect(
+    host='localhost',
+    port=3306,
+    user='root',
+    password='Pyh019026',
+    database='binance_demo',
+    cursorclass=pymysql.cursors.DictCursor)  # 本地 账密替换
 cursor = db.cursor()
-
-cursor.execute("SELECT VERSION()")
-
-# 使用 fetchone() 方法获取单条数据.
-data = cursor.fetchone()
-
-print ("Database version : %s " % data)
 
 
 @app.route('/')
-def home():
-    # Passing dynamic content to the Jinja template
-    return render_template('index.html', 
-                           title="My Flask App", 
-                           heading="Welcome to My Flask App", 
-                           content="This is a sample Jinja page.",
-                           items=['Flask', 'Jinja2', 'Python'], 
-                           user="John Doe")
+def hello():
+    return 'Hello, Flask!'
 
 
-
-@app.route('/order',methods = ['POST'])
+@app.route('/buy', methods=['POST'])
 @validate()
-def order(body: OrderBook):
+def buy(body: Order):
+    buyOrder = body
 
-    order_info = body
+    selectSellOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price asc"
+    updateSellOrderSql = "update order_book set processed_amount = %s, status = %s where id = %s"
+    createBuyOrderSql = "insert into order_book (type, order_price, order_amount) values (%s, %s, %s)"
+    createTradeSql = "insert into trade_record (trade_price, trade_amount) values (%s, %s)"
 
-    # Add your code here to handle the order route
-    user_id = 1
-
-    order_info = pre_insert(order_info)
-
-    # Generate SQL string to insert data into "order_book" table
-    sql = "INSERT INTO order_book (user_id, order_price, order_amount, type, create_time, del_flag) VALUES (%s, %s, %s, %s, %s, %s)"
-    values = (user_id, order_info.order_price, order_info.order_amount,order_info.order_type,order_info.create_time,order_info.del_flag)
+    cursor.execute(db.escape_string(selectSellOrderSql), (buyOrder.price, 'sell'))
+    orders = cursor.fetchall()
 
     try:
-        # Execute the SQL query
-        cursor.execute(sql, values)
+        for order in orders:
+            sellAmount = order['order_amount'] - order['processed_amount']
+            buyOrder.amount -= sellAmount
+            if buyOrder.amount > 0:
+                cursor.execute(db.escape_string(updateSellOrderSql), (order['order_amount'], 1, order['id']))
+                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], sellAmount))
+            else:
+                cursor.execute(db.escape_string(updateSellOrderSql),
+                               (order['order_amount'] + buyOrder.amount, 0, order['id']))
+                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], sellAmount + buyOrder.amount))
+                break
 
-        # Commit the changes to the database
+        if buyOrder.amount > 0:
+            cursor.execute(db.escape_string(createBuyOrderSql), ('buy', buyOrder.price, buyOrder.amount))
+
         db.commit()
+
+        return response(code=200, message="Order Success")
+
     except pymysql.Error as e:
         db.rollback()
-        return response(code = 500, message = f"Database error: {e}")
+        return response(code=500, message=f"Database error: {e}")
 
-    # Close the cursor and database connection
-    return response(code = 200, message = "Order success!")
-    
+
+@app.route('/sell', methods=['POST'])
+@validate()
+def sell(body: Order):
+    sellOrder = body
+
+    selectBuyOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price desc"
+    updateBuyOrderSql = "update order_book set processed_amount = %s, status = %s where id = %s"
+    createSellOrderSql = "insert into order_book (type, order_price, order_amount) values (%s, %s, %s)"
+    createTradeSql = "insert into trade_record (trade_price, trade_amount) values (%s, %s)"
+
+    cursor.execute(db.escape_string(selectBuyOrderSql), (sellOrder.price, 'buy'))
+    orders = cursor.fetchall()
+
+    try:
+        for order in orders:
+            buyAmount = order['order_amount'] - order['processed_amount']
+            sellOrder.amount -= buyAmount
+            if sellOrder.amount > 0:
+                cursor.execute(db.escape_string(updateBuyOrderSql), (order['order_amount'], 1, order['id']))
+                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], buyAmount))
+            else:
+                cursor.execute(db.escape_string(updateBuyOrderSql),
+                               (order['order_amount'] + sellOrder.amount, 0, order['id']))
+                cursor.execute(db.escape_string(createTradeSql), (order['order_price'], buyAmount + sellOrder.amount))
+                break
+
+        if sellOrder.amount > 0:
+            cursor.execute(db.escape_string(createSellOrderSql), ('buy', sellOrder.price, sellOrder.amount))
+
+        db.commit()
+
+        return response(code=200, message="Order Success")
+
+    except pymysql.Error as e:
+        db.rollback()
+        return response(code=500, message=f"Database error: {e}")
+
+
 # get chart data
-@app.route('/getChart',methods = ['GET'])
+@app.route('/getChart', methods=['GET'])
 @validate()
 def getChart(query: Interval):
     interval = query.interval
@@ -103,7 +143,7 @@ def getChart(query: Interval):
         db_list = cursor.fetchall()
         temp = {}
         result = []
-        if(db_list is not None):
+        if (db_list is not None):
             for db in db_list:
                 temp = {
                     "timestamp": db[0],
@@ -115,10 +155,11 @@ def getChart(query: Interval):
                 }
                 result.append(temp.copy())
             print("result:", result)
-        return response(code = 200, message = "get chart data success", data = result)
+        return response(code=200, message="get chart data success", data=result)
     except pymysql.Error as e:
         db.rollback()
-        return response(code = 500, message = f"an error occurred: Database error: {e}")
+        return response(code=500, message=f"an error occurred: Database error: {e}")
+
 
 if __name__ == '__main__':
     host = app.config.get('HOST', '127.0.0.1')  # 默认值为 '127.0.0.1'，如果未找到 'HOST' 配置项
