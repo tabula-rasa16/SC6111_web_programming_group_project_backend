@@ -71,6 +71,54 @@ def order(body: OrderBook):
 
     # Close the cursor and database connection
     return response(code = 200, message = "Order success!")
+    
+# get chart data
+@app.route('/getChart',methods = ['GET'])
+@validate()
+def getChart(query: Interval):
+    interval = query.interval
+    sql = '''
+            SELECT 
+                UNIX_TIMESTAMP(DATE_FORMAT(DATE_SUB(create_time, INTERVAL SECOND(create_time) SECOND), '%%Y-%%m-%%d %%H:%%i:00'))*1000 AS `timestamp`,
+                MIN(trade_price) AS min_price,
+                MAX(trade_price) AS max_price,
+                (SELECT trade_price FROM trade_record t2 
+                WHERE DATE_FORMAT(t2.create_time, '%%Y-%%m-%%d %%H:%%i') = DATE_FORMAT(t1.create_time, '%%Y-%%m-%%d %%H:%%i')
+                ORDER BY t2.create_time ASC LIMIT 1) AS first_price,
+                (SELECT trade_price FROM trade_record t2 
+                WHERE DATE_FORMAT(t2.create_time, '%%Y-%%m-%%d %%H:%%i') = DATE_FORMAT(t1.create_time, '%%Y-%%m-%%d %%H:%%i')
+                ORDER BY t2.create_time DESC LIMIT 1) AS last_price,
+                SUM(trade_amount) AS total_amount
+            FROM 
+                trade_record t1
+            WHERE 
+                create_time >= NOW() - INTERVAL %s HOUR
+                AND del_flag = '0'
+            GROUP BY 
+                DATE_FORMAT(create_time, '%%Y-%%m-%%d %%H:%%i')
+            ORDER BY 
+                `timestamp`;'''
+    try:
+        cursor.execute(sql, (interval,))
+        db_list = cursor.fetchall()
+        temp = {}
+        result = []
+        if(db_list is not None):
+            for db in db_list:
+                temp = {
+                    "timestamp": db[0],
+                    "low": float(db[1]),
+                    "high": float(db[2]),
+                    "open": float(db[3]),
+                    "close": float(db[4]),
+                    "volume": float(db[5]),
+                }
+                result.append(temp.copy())
+            print("result:", result)
+        return response(code = 200, message = "get chart data success", data = result)
+    except pymysql.Error as e:
+        db.rollback()
+        return response(code = 500, message = f"an error occurred: Database error: {e}")
 
 if __name__ == '__main__':
     host = app.config.get('HOST', '127.0.0.1')  # 默认值为 '127.0.0.1'，如果未找到 'HOST' 配置项
