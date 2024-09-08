@@ -2,3 +2,4 @@ flask
 pymysql
 pydantic
 Flask-Pydantic
+# pysnowflake used for PK generation, no need if PK is auto incremented
