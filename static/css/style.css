@@ -67,17 +67,33 @@ body {
   font-size: 14px; /* Slightly smaller font for headers */
 }
 
+.orderbook-ticker {
+  align-items: center;
+  display: flex;
+  height: 36px;
+  overflow: hidden;
+  padding: 0 16px;
+}
+
+.middlePrice {
+  align-items: center;
+  display: flex;
+  font-size: 20px;
+  margin-right: 4px;
+}
+
 /* Order Book & Right-Side List Item Styling */
 .order-book-item,
 .right-item {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 4px 0; /* Reduced padding for more compact spacing */
   border-bottom: 1px solid #444; /* Darker border for separation */
   color: #eaeaea; /* Light grey for visibility */
+  font-size: 11px; /* Slightly smaller font for compactness */
+  line-height: 1.2; /* Tighter line-height */
   transition: background-color 0.3s ease;
 }
-
 .order-book-item:last-child,
 .right-item:last-child {
   border-bottom: none; /* No border for the last item */
