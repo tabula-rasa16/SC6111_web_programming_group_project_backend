@@ -1,6 +1,8 @@
 document.addEventListener("DOMContentLoaded", function () {
   console.log("Fetching order list...");
   fetchOrderList();
+  console.log("Fetching trade list...");
+  fetchTradeList();
 });
 
 function calculateTotal() {
@@ -74,6 +76,44 @@ function fetchOrderList() {
       document.getElementById("sellOrders").innerHTML =
         "<div>Error loading Sell Orders</div>";
       document.getElementById("middlePrice").innerHTML = "N/A";
+    },
+  });
+}
+
+function fetchTradeList() {
+  $.ajax({
+    url: "/getTradeList",
+    type: "GET",
+    success: function (data) {
+      if (data.code === 200) {
+        const tradeList = data.data.tradeList || [];
+
+        // Clear and update trade list
+        const tradeListDiv = document.getElementById("marketTradeList");
+        tradeListDiv.innerHTML = ""; // Clear previous content
+
+        if (tradeList.length === 0) {
+          tradeListDiv.innerHTML = "<div>No Trades Available</div>";
+        } else {
+          tradeList.forEach((trade) => {
+            tradeListDiv.innerHTML += `
+              <div class="right-item">
+                <span>${trade.price}</span>
+                <span>${trade.amount}</span>
+                <span>${trade.create_time}</span>
+              </div>`;
+          });
+        }
+      } else {
+        console.error("Error fetching trade list: " + data.message);
+      }
+    },
+    error: function (xhr, status, error) {
+      console.error("Failed to fetch trade list: " + error);
+
+      // Handle error by displaying a placeholder
+      document.getElementById("marketTradeList").innerHTML =
+        "<div>Error loading Trade List</div>";
     },
   });
 }
