@@ -40,6 +40,7 @@ function fetchOrderList() {
               <div class="order-book-item">
                 <span>${order.price}</span>
                 <span>${order.amount}</span>
+                <span>${order.price * order.amount}</span>
               </div>`;
           });
         }
@@ -55,6 +56,7 @@ function fetchOrderList() {
               <div class="order-book-item">
                 <span>${order.price}</span>
                 <span>${order.amount}</span>
+                <span>${order.price * order.amount}</span>
               </div>`;
           });
         }
