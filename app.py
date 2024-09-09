@@ -1,13 +1,9 @@
 from flask import Flask, request, render_template
-import json
-import pymysql
-from typing import Optional
 
 from flask_pydantic import validate
 
 from config import Config
 
-from common.utils import *
 from common.jsontools import *
 
 # 引入实体类
@@ -16,26 +12,41 @@ from entityModels import *
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Create a MySQL connector
+import pymysql
+from pymysql import cursors
+from dbutils.pooled_db import PooledDB
 
-db = pymysql.connect(
-    host='127.0.0.1',
-    port=13306,
+pool = PooledDB(
+    creator=pymysql,
+    # 创建最大连接
+    maxconnections=6,
+    mincached=2,
+    maxcached=3,
+    maxshared=4,
+    blocking=True,
+    maxusage=None,
+    setsession=[],
+    ping=0,
+    # 这一坨会传给上面的 pymysql
+    host='localhost',
+    port=3306,
     user='root',
-    password='admin',
+    passwd='',
     database='binance_demo',
-    cursorclass=pymysql.cursors.DictCursor)  # 本地 账密替换
-cursor = db.cursor()
+    charset='utf8',
+    # 让查询结果是一个 dict
+    cursorclass=cursors.DictCursor
+)
 
 
 @app.route('/')
 def home():
     # Passing dynamic content to the Jinja template
-    return render_template('index.html', 
-                           title="My Flask App", 
-                           heading="Welcome to My Flask App", 
+    return render_template('index.html',
+                           title="My Flask App",
+                           heading="Welcome to My Flask App",
                            content="This is a sample Jinja page.",
-                           items=['Flask', 'Jinja2', 'Python'], 
+                           items=['Flask', 'Jinja2', 'Python'],
                            user="John Doe")
 
 
@@ -47,7 +58,6 @@ def buy(body: Order):
         trade(buyOrder.price, buyOrder.amount, 'buy')
         return response(code=200, message="Sell Success")
     except pymysql.Error as e:
-        db.rollback()
         return response(code=500, message=f"Database error: {e}")
 
 
@@ -59,7 +69,6 @@ def sell(body: Order):
         trade(sellOrder.price, sellOrder.amount, 'sell')
         return response(code=200, message="Sell Success")
     except pymysql.Error as e:
-        db.rollback()
         return response(code=500, message=f"Database error: {e}")
 
 
@@ -74,54 +83,71 @@ def trade(price, amount, type):
     selectType = 'sell' if type == 'buy' else 'buy'
     selectOrderSql = selectBuyOrderSql if type == 'buy' else selectSellOrderSql
 
-    cursor.execute(db.escape_string(selectOrderSql), (price, selectType))
-    orders = cursor.fetchall()
+    conn = pool.connection()
 
-    for order in orders:
-        restAmount = order['order_amount'] - order['processed_amount']
-        amount -= restAmount
+    try:
+        cursor = conn.cursor()
+        cursor.execute(selectOrderSql, (price, selectType))
+        orders = cursor.fetchall()
+        if orders is not None:
+            for order in orders:
+                restAmount = order['order_amount'] - order['processed_amount']
+                amount -= restAmount
+                if amount > 0:
+                    cursor.execute(updateOrderSql, (order['order_amount'], 1, order['id']))
+                    cursor.execute(createTradeSql,
+                                   (order['order_price'] if type == 'buy' else price, restAmount))
+                else:
+                    cursor.execute(updateOrderSql,
+                                   (order['order_amount'] + amount, 0, order['id']))
+                    cursor.execute(createTradeSql,
+                                   (order['order_price'] if type == 'buy' else price, restAmount + amount))
+                    break
+
         if amount > 0:
-            cursor.execute(db.escape_string(updateOrderSql), (order['order_amount'], 1, order['id']))
-            cursor.execute(db.escape_string(createTradeSql), (order['order_price'] if type == 'buy' else price, restAmount))
-        else:
-            cursor.execute(db.escape_string(updateOrderSql),
-                           (order['order_amount'] + amount, 0, order['id']))
-            cursor.execute(db.escape_string(createTradeSql), (order['order_price'] if type == 'buy' else price, restAmount + amount))
-            break
+            cursor.execute(createOrderSql, (type, price, amount))
 
-    if amount > 0:
-        cursor.execute(db.escape_string(createOrderSql), (type, price, amount))
-
-    db.commit()
+        conn.commit()
+        conn.close()
+    except pymysql.Error as e:
+        conn.rollback()
+        return response(code=500, message=f"Database error: {e}")
 
 
 @app.route('/getOrderList', methods=['GET'])
 def getOrderList():
-    getOrderListSql = "select order_price, order_amount, processed_amount from order_book where type = %s and status = 0 order by order_price desc"
-
     try:
-        sellList, buyList = getOrders(getOrderListSql, 'sell'), getOrders(getOrderListSql, 'buy')
+        sellList, buyList = getOrders('sell'), getOrders('buy')
         orderList = {
             'sellList': sellList,
             'buyList': buyList,
-            'maxBuyPrice': buyList[0]['price'] if buyList else 0,
+            'maxBuyPrice': 0 if buyList is None else buyList[0]['price']
         }
         return response(code=200, message="Order List", data=orderList)
     except pymysql.Error as e:
-        db.rollback()
         return response(code=500, message=f"an error occurred: Database error: {e}")
 
 
-def getOrders(sql, type):
+def getOrders(type):
+    getOrderListSql = "select order_price, order_amount, processed_amount from order_book where type = %s and status = 0 order by order_price desc"
     orderList = []
-    cursor.execute(db.escape_string(sql), (type,))
-    orders = cursor.fetchall()
-    for order in orders:
-        orderList.append({
-            'price': order['order_price'],
-            'amount': order['order_amount'] - order['processed_amount']
-        })
-    return orderList
+
+    conn = pool.connection()
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(getOrderListSql, (type,))
+        orders = cursor.fetchall()
+        if orders is not None:
+            for order in orders:
+                orderList.append({
+                    'price': order['order_price'],
+                    'amount': order['order_amount'] - order['processed_amount']
+                })
+        conn.close()
+        return orderList
+    except pymysql.Error as e:
+        conn.rollback()
 
 
 @app.route('/getTradeList', methods=['GET'])
@@ -131,24 +157,28 @@ def getTradeList():
     sql = "select trade_price, trade_amount, create_time from trade_record order by create_time desc limit 50"
     # sql = "select trade_price, trade_amount, create_time from trade_record where create_time between %s and %s order by create_time desc limit 50"
 
+    conn = pool.connection()
+
     try:
         tradeList = []
-        cursor.execute(db.escape_string(sql))
-        # cursor.execute(db.escape_string(sql), (startTime, endTime))
+
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        # cursor.execute(conn.escape_string(sql), (startTime, endTime))
         trades = cursor.fetchall()
-        for trade in trades:
-            tradeList.append({
-                'price': trade['trade_price'],
-                'amount': trade['trade_amount'],
-                'create_time': trade['create_time'].strftime("%H:%M:%S")
-            })
+        if trades is not None:
+            for trade in trades:
+                tradeList.append({
+                    'price': trade['trade_price'],
+                    'amount': trade['trade_amount'],
+                    'create_time': trade['create_time'].strftime("%H:%M:%S")
+                })
         res = {'tradeList': tradeList}
+        conn.close()
         return response(code=200, message="Trade List", data=res)
     except pymysql.Error as e:
-        db.rollback()
+        conn.rollback()
         return response(code=500, message=f"an error occurred: Database error: {e}")
-
-
 
 
 # get chart data
@@ -177,7 +207,11 @@ def getChart(query: Interval):
                 DATE_FORMAT(create_time, '%%Y-%%m-%%d %%H:%%i')
             ORDER BY 
                 `timestamp`;'''
+
+    conn = pool.connection()
+
     try:
+        cursor = conn.cursor()
         cursor.execute(sql, (interval,))
         db_list = cursor.fetchall()
         temp = {}
@@ -196,11 +230,11 @@ def getChart(query: Interval):
             print("result:", result)
         return response(code=200, message="get chart data success", data=result)
     except pymysql.Error as e:
-        db.rollback()
+        conn.rollback()
         return response(code=500, message=f"an error occurred: Database error: {e}")
 
 
 if __name__ == '__main__':
     host = app.config.get('HOST', '127.0.0.1')  # 默认值为 '127.0.0.1'，如果未找到 'HOST' 配置项
-    port = app.config.get('PORT', 13306)  # 默认值为 5000，如果未找到 'PORT' 配置项
+    port = app.config.get('PORT', 5000)  # 默认值为 5000，如果未找到 'PORT' 配置项
     app.run(host=host, port=port)
