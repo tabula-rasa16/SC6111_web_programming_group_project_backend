@@ -1,8 +1,6 @@
 document.addEventListener("DOMContentLoaded", function () {
-
-  // Fetch Order Book data for both Buy and Sell orders
-  fetchBuyOrders();
-  fetchSellOrders();
+  console.log("Fetching order list...");
+  fetchOrderList();
 });
 
 function calculateTotal() {
@@ -20,60 +18,63 @@ function sell() {
   alert("Sell action triggered");
 }
 
-function fetchBuyOrders() {
+function fetchOrderList() {
   $.ajax({
-    url: "/api/order-book/buy", // Replace with your actual API endpoint
+    url: "/getOrderList", // Single API endpoint
     type: "GET",
     success: function (data) {
-      const buyList = data.buyOrders || [];
-      const buyOrdersDiv = document.getElementById("buyOrders");
+      if (data.code === 200) {
+        const buyList = data.data.buyList || [];
+        const sellList = data.data.sellList || [];
 
-      buyOrdersDiv.innerHTML = ""; // Clear previous content
+        // Clear and update buy orders
+        const buyOrdersDiv = document.getElementById("buyOrders");
+        buyOrdersDiv.innerHTML = ""; // Clear previous content
+        if (buyList.length === 0) {
+          buyOrdersDiv.innerHTML = "<div>No Buy Orders</div>";
+        } else {
+          buyList.forEach((order) => {
+            buyOrdersDiv.innerHTML += `
+              <div class="order-book-item">
+                <span>${order.price}</span>
+                <span>${order.amount}</span>
+              </div>`;
+          });
+        }
 
-      if (buyList.length === 0) {
-        buyOrdersDiv.innerHTML = "<div>No Buy Orders</div>";
+        // Clear and update sell orders
+        const sellOrdersDiv = document.getElementById("sellOrders");
+        sellOrdersDiv.innerHTML = ""; // Clear previous content
+        if (sellList.length === 0) {
+          sellOrdersDiv.innerHTML = "<div>No Sell Orders</div>";
+        } else {
+          sellList.forEach((order) => {
+            sellOrdersDiv.innerHTML += `
+              <div class="order-book-item">
+                <span>${order.price}</span>
+                <span>${order.amount}</span>
+              </div>`;
+          });
+        }
+
+        // Update middle price with the highest buy price
+        const highestBuyPrice = data.data.maxBuyPrice;
+        document.getElementById("middlePrice").innerHTML =
+          highestBuyPrice.toFixed(2);
       } else {
-        buyList.forEach((order) => {
-          buyOrdersDiv.innerHTML += `
-            <div class="order-book">
-              <span>${order.price}</span>
-              <span>${order.amount}</span>
-            </div>`;
-        });
+        console.error("Error fetching order list: " + data.message);
       }
     },
-    error: function () {
+    error: function (xhr, status, error) {
+      console.error("Failed to fetch order list: " + error);
+
+      // Handle error by displaying placeholders for buy and sell orders
       document.getElementById("buyOrders").innerHTML =
         "<div>Error loading Buy Orders</div>";
-    },
-  });
-}
-
-function fetchSellOrders() {
-  $.ajax({
-    url: "/api/order-book/sell", // Replace with your actual API endpoint
-    type: "GET",
-    success: function (data) {
-      const sellList = data.sellOrders || [];
-      const sellOrdersDiv = document.getElementById("sellOrders");
-
-      sellOrdersDiv.innerHTML = ""; // Clear previous content
-
-      if (sellList.length === 0) {
-        sellOrdersDiv.innerHTML = "<div>No Sell Orders</div>";
-      } else {
-        sellList.forEach((order) => {
-          sellOrdersDiv.innerHTML += `
-            <div class="order-book">
-              <span>${order.price}</span>
-              <span>${order.amount}</span>
-            </div>`;
-        });
-      }
-    },
-    error: function () {
       document.getElementById("sellOrders").innerHTML =
         "<div>Error loading Sell Orders</div>";
+      document.getElementById("middlePrice").innerHTML = "N/A";
     },
   });
 }
+

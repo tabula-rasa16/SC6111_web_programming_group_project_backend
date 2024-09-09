@@ -19,18 +19,24 @@ app.config.from_object(Config)
 # Create a MySQL connector
 
 db = pymysql.connect(
-    host='localhost',
-    port=3306,
+    host='127.0.0.1',
+    port=13306,
     user='root',
-    password='',
+    password='admin',
     database='binance_demo',
     cursorclass=pymysql.cursors.DictCursor)  # 本地 账密替换
 cursor = db.cursor()
 
 
 @app.route('/')
-def hello():
-    return 'Hello, Flask!'
+def home():
+    # Passing dynamic content to the Jinja template
+    return render_template('index.html', 
+                           title="My Flask App", 
+                           heading="Welcome to My Flask App", 
+                           content="This is a sample Jinja page.",
+                           items=['Flask', 'Jinja2', 'Python'], 
+                           user="John Doe")
 
 
 @app.route('/buy', methods=['POST'])
@@ -98,7 +104,7 @@ def getOrderList():
         orderList = {
             'sellList': sellList,
             'buyList': buyList,
-            'maxBuyPrice': buyList[0]['price'],
+            'maxBuyPrice': buyList[0]['price'] if buyList else 0,
         }
         return response(code=200, message="Order List", data=orderList)
     except pymysql.Error as e:
@@ -196,5 +202,5 @@ def getChart(query: Interval):
 
 if __name__ == '__main__':
     host = app.config.get('HOST', '127.0.0.1')  # 默认值为 '127.0.0.1'，如果未找到 'HOST' 配置项
-    port = app.config.get('PORT', 5000)  # 默认值为 5000，如果未找到 'PORT' 配置项
+    port = app.config.get('PORT', 13306)  # 默认值为 5000，如果未找到 'PORT' 配置项
     app.run(host=host, port=port)
