@@ -176,6 +176,26 @@
             volume: 340,
           },
         ]);
+        function loadChartData(interval) {
+            fetch(`/getChart?interval=${interval}`)
+                .then(response => response.json())
+                .then(data => {
+                    const chartData = data.map(item => ({
+                        timestamp: item.timestamp * 1000,
+                        open: item.first_price,
+                        high: item.max_price,
+                        low: item.min_price,
+                        close: item.last_price,
+                        volume: item.total_amount
+                    }));
+                    chart.applyNewData(chartData);
+                })
+                .catch(error => {
+                    console.error('Error loading chart data:', error);
+                });
+        }
+        // 默认加载1小时数据
+        loadChartData('1h');
       });
     </script>
   </body>
