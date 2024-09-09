@@ -121,7 +121,7 @@ def getOrderList():
         orderList = {
             'sellList': sellList,
             'buyList': buyList,
-            'maxBuyPrice': 0 if buyList is None else buyList[0]['price']
+            'maxBuyPrice': 0 if not buyList else buyList[0]['price']
         }
         return response(code=200, message="Order List", data=orderList)
     except pymysql.Error as e:
