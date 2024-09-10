@@ -219,12 +219,12 @@ def getChart(query: Interval):
         if (db_list is not None):
             for db in db_list:
                 temp = {
-                    "timestamp": db[0],
-                    "low": float(db[1]),
-                    "high": float(db[2]),
-                    "open": float(db[3]),
-                    "close": float(db[4]),
-                    "volume": float(db[5]),
+                    "timestamp": db['timestamp'],
+                    "low": float(db['min_price']),
+                    "high": float(db['max_price']),
+                    "open": float(db['first_price']),
+                    "close": float(db['last_price']),
+                    "volume": float(db['total_amount']),
                 }
                 result.append(temp.copy())
             print("result:", result)
