@@ -1,6 +1,7 @@
 from flask import Flask, request, render_template
 
 from flask_pydantic import validate
+from pydantic import ValidationError
 
 from config import Config
 
@@ -31,7 +32,7 @@ pool = PooledDB(
     host='localhost',
     port=3306,
     user='root',
-    passwd='',
+    passwd='Pyh019026',
     database='binance_demo',
     charset='utf8',
     # 让查询结果是一个 dict
@@ -59,6 +60,8 @@ def buy(body: Order):
         return response(code=200, message="Sell Success")
     except pymysql.Error as e:
         return response(code=500, message=f"Database error: {e}")
+    except ValidationError as e:
+        return response(code=500, message=f"Invalid parameters: {e}")
 
 
 @app.route('/sell', methods=['POST'])
@@ -154,7 +157,7 @@ def getOrders(type):
 def getTradeList():
     # endTime = datetime.now()
     # startTime = endTime - timedelta(minutes=10)
-    sql = "select trade_price, trade_amount, create_time from trade_record order by create_time desc limit 50"
+    sql = "select trade_price, trade_amount, create_time from trade_record order by create_time desc limit 20"
     # sql = "select trade_price, trade_amount, create_time from trade_record where create_time between %s and %s order by create_time desc limit 50"
 
     conn = pool.connection()
@@ -216,6 +219,7 @@ def getChart(query: Interval):
         db_list = cursor.fetchall()
         temp = {}
         result = []
+        print(db_list)
         if (db_list is not None):
             for db in db_list:
                 temp = {
