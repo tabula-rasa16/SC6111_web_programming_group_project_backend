@@ -32,7 +32,7 @@ pool = PooledDB(
     host='localhost',
     port=3306,
     user='root',
-    passwd='',
+    passwd='Pyh019026',
     database='binance_demo',
     charset='utf8',
     # 让查询结果是一个 dict
