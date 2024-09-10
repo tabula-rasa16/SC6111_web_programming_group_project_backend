@@ -160,6 +160,8 @@
 
         // 默认加载1小时数据
         loadChartData('1');
+        // 设置定时调用，间隔3s
+        setInterval(loadChartData,3000,'1');
 
         // Apply chart data back in HTML
         // chart.applyNewData([
