@@ -16,6 +16,9 @@ app.config.from_object(Config)
 import pymysql
 from pymysql import cursors
 from dbutils.pooled_db import PooledDB
+from datetime import datetime
+
+import hashlib
 
 pool = PooledDB(
     creator=pymysql,
@@ -30,9 +33,9 @@ pool = PooledDB(
     ping=0,
     # 这一坨会传给上面的 pymysql
     host='localhost',
-    port=3306,
+    port=13306,
     user='root',
-    passwd='',
+    passwd='admin',
     database='binance_demo',
     charset='utf8',
     # 让查询结果是一个 dict
@@ -51,191 +54,99 @@ def home():
                            user="John Doe")
 
 
-@app.route('/buy', methods=['POST'])
-@validate()
-def buy(body: Order):
-    buyOrder = body
+@app.route('/users/login', methods=['POST'])
+def login():
+    # Parse the JSON request data
+    data = request.get_json()
+    
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify(response(code=400, message="Username and password are required")), 400
+
+    sql = "SELECT username, password_hash FROM users WHERE username = %s"
+    
+    conn = pool.connection()
+
     try:
-        trade(buyOrder.price, buyOrder.amount, 'buy')
-        return response(code=200, message="Sell Success")
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(sql, (username,))
+        user = cursor.fetchone()
+
+        if user:
+            # Hash the provided password with the dummy hash function
+            hashed_password = dummy_hash_password(password)
+            
+            # Compare the hashed passwords
+            if hashed_password == user['password_hash']:
+                return jsonify(response(code=200, message="Login successful")), 200
+            else:
+                return jsonify(response(code=401, message="Invalid credentials")), 401
+        else:
+            return jsonify(response(code=404, message="User not found")), 404
+
     except pymysql.Error as e:
-        return response(code=500, message=f"Database error: {e}")
-    except ValidationError as e:
-        return response(code=500, message=f"Invalid parameters: {e}")
+        conn.rollback()
+        return jsonify(response(code=500, message=f"Database error: {e}")), 500
+
+    finally:
+        conn.close()
 
 
-@app.route('/sell', methods=['POST'])
-@validate()
-def sell(body: Order):
-    sellOrder = body
-    try:
-        trade(sellOrder.price, sellOrder.amount, 'sell')
-        return response(code=200, message="Sell Success")
-    except pymysql.Error as e:
-        return response(code=500, message=f"Database error: {e}")
+@app.route('/users/register', methods=['POST'])
+def register():
+    # Parse the JSON request data
+    data = request.get_json()
 
+    username = data.get('username')
+    password = data.get('password')
 
-def trade(price, amount, type):
-    selectBuyOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price <= %s and status = 0 and type = %s order by order_price asc"
-    selectSellOrderSql = "select id, order_price, order_amount, processed_amount from order_book where order_price >= %s and status = 0 and type = %s order by order_price asc"
+    if not username or not password:
+        return jsonify(response(code=400, message="Username and password are required")), 400
 
-    updateOrderSql = "update order_book set processed_amount = %s, status = %s where id = %s"
-    createOrderSql = "insert into order_book (type, order_price, order_amount) values (%s, %s, %s)"
-    createTradeSql = "insert into trade_record (trade_price, trade_amount) values (%s, %s)"
+    # Hash the password
+    password_hash = dummy_hash_password(password)
 
-    selectType = 'sell' if type == 'buy' else 'buy'
-    selectOrderSql = selectBuyOrderSql if type == 'buy' else selectSellOrderSql
+    sql_check_user = "SELECT username FROM users WHERE username = %s"
+    sql_insert_user = "INSERT INTO users (username, password_hash, created_time, is_active) VALUES (%s, %s, %s, %s)"
 
     conn = pool.connection()
 
     try:
-        cursor = conn.cursor()
-        cursor.execute(selectOrderSql, (price, selectType))
-        orders = cursor.fetchall()
-        if orders is not None:
-            for order in orders:
-                restAmount = order['order_amount'] - order['processed_amount']
-                amount -= restAmount
-                if amount > 0:
-                    cursor.execute(updateOrderSql, (order['order_amount'], 1, order['id']))
-                    cursor.execute(createTradeSql,
-                                   (order['order_price'] if type == 'buy' else price, restAmount))
-                else:
-                    cursor.execute(updateOrderSql,
-                                   (order['order_amount'] + amount, 0, order['id']))
-                    cursor.execute(createTradeSql,
-                                   (order['order_price'] if type == 'buy' else price, restAmount + amount))
-                    break
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        if amount > 0:
-            cursor.execute(createOrderSql, (type, price, amount))
+        # Check if the user already exists
+        cursor.execute(sql_check_user, (username,))
+        user = cursor.fetchone()
 
+        if user:
+            return jsonify(response(code=409, message="Username already exists")), 409
+
+        # Insert new user into the database
+        cursor.execute(sql_insert_user, (username, password_hash, datetime.now(), True))
         conn.commit()
+
+        return jsonify(response(code=201, message="User registered successfully")), 201
+
+    except pymysql.Error as e:
+        conn.rollback()
+        return jsonify(response(code=500, message=f"Database error: {e}")), 500
+
+    finally:
         conn.close()
-    except pymysql.Error as e:
-        conn.rollback()
-        return response(code=500, message=f"Database error: {e}")
 
 
-@app.route('/getOrderList', methods=['GET'])
-def getOrderList():
-    try:
-        sellList, buyList = getOrders('sell'), getOrders('buy')
-        orderList = {
-            'sellList': sellList,
-            'buyList': buyList,
-            'maxBuyPrice': 0 if not buyList else buyList[0]['price']
-        }
-        return response(code=200, message="Order List", data=orderList)
-    except pymysql.Error as e:
-        return response(code=500, message=f"an error occurred: Database error: {e}")
+def response(code, message, data=None):
+    return {
+        'code': code,
+        'message': message,
+        'data': data
+    }
 
-
-def getOrders(type):
-    getOrderListSql = "select order_price, order_amount, processed_amount from order_book where type = %s and status = 0 order by order_price desc"
-    orderList = []
-
-    conn = pool.connection()
-
-    try:
-        cursor = conn.cursor()
-        cursor.execute(getOrderListSql, (type,))
-        orders = cursor.fetchall()
-        if orders is not None:
-            for order in orders:
-                orderList.append({
-                    'price': order['order_price'],
-                    'amount': order['order_amount'] - order['processed_amount']
-                })
-        conn.close()
-        return orderList
-    except pymysql.Error as e:
-        conn.rollback()
-
-
-@app.route('/getTradeList', methods=['GET'])
-def getTradeList():
-    # endTime = datetime.now()
-    # startTime = endTime - timedelta(minutes=10)
-    sql = "select trade_price, trade_amount, create_time from trade_record order by create_time desc limit 20"
-    # sql = "select trade_price, trade_amount, create_time from trade_record where create_time between %s and %s order by create_time desc limit 50"
-
-    conn = pool.connection()
-
-    try:
-        tradeList = []
-
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        # cursor.execute(conn.escape_string(sql), (startTime, endTime))
-        trades = cursor.fetchall()
-        if trades is not None:
-            for trade in trades:
-                tradeList.append({
-                    'price': trade['trade_price'],
-                    'amount': trade['trade_amount'],
-                    'create_time': trade['create_time'].strftime("%H:%M:%S")
-                })
-        res = {'tradeList': tradeList}
-        conn.close()
-        return response(code=200, message="Trade List", data=res)
-    except pymysql.Error as e:
-        conn.rollback()
-        return response(code=500, message=f"an error occurred: Database error: {e}")
-
-
-# get chart data
-@app.route('/getChart', methods=['GET'])
-@validate()
-def getChart(query: Interval):
-    interval = query.interval
-    sql = '''
-            SELECT 
-                UNIX_TIMESTAMP(DATE_FORMAT(DATE_SUB(create_time, INTERVAL SECOND(create_time) SECOND), '%%Y-%%m-%%d %%H:%%i:00'))*1000 AS `timestamp`,
-                MIN(trade_price) AS min_price,
-                MAX(trade_price) AS max_price,
-                (SELECT trade_price FROM trade_record t2 
-                WHERE DATE_FORMAT(t2.create_time, '%%Y-%%m-%%d %%H:%%i') = DATE_FORMAT(t1.create_time, '%%Y-%%m-%%d %%H:%%i')
-                ORDER BY t2.create_time ASC LIMIT 1) AS first_price,
-                (SELECT trade_price FROM trade_record t2 
-                WHERE DATE_FORMAT(t2.create_time, '%%Y-%%m-%%d %%H:%%i') = DATE_FORMAT(t1.create_time, '%%Y-%%m-%%d %%H:%%i')
-                ORDER BY t2.create_time DESC LIMIT 1) AS last_price,
-                SUM(trade_amount) AS total_amount
-            FROM 
-                trade_record t1
-            WHERE 
-                create_time >= NOW() - INTERVAL %s HOUR
-                AND del_flag = '0'
-            GROUP BY 
-                DATE_FORMAT(create_time, '%%Y-%%m-%%d %%H:%%i')
-            ORDER BY 
-                `timestamp`;'''
-
-    conn = pool.connection()
-
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql, (interval,))
-        db_list = cursor.fetchall()
-        temp = {}
-        result = []
-        print(db_list)
-        if (db_list is not None):
-            for db in db_list:
-                temp = {
-                    "timestamp": db['timestamp'],
-                    "low": float(db['min_price']),
-                    "high": float(db['max_price']),
-                    "open": float(db['first_price']),
-                    "close": float(db['last_price']),
-                    "volume": float(db['total_amount']),
-                }
-                result.append(temp.copy())
-            print("result:", result)
-        return response(code=200, message="get chart data success", data=result)
-    except pymysql.Error as e:
-        conn.rollback()
-        return response(code=500, message=f"an error occurred: Database error: {e}")
+# Dummy hash function using SHA-256
+def dummy_hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
 if __name__ == '__main__':
